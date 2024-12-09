@@ -6,6 +6,7 @@ Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 // Function declarations (prototypes)
 void setLetterColor(int startLed, int length, uint32_t color);
 void clearStrip();
+void fadeInAndHold();  // Added new function prototype
 void letterSequence(int wait);
 void letterRainbow(int cycles);
 void letterChase(uint32_t color, int wait, int cycles);
@@ -18,13 +19,14 @@ void setup() {
 }
 
 void loop() {
-  // Run different letter-based effects
+  // Start with fade in and hold
+  fadeInAndHold();
+  delay(SCENE_TRANSITION);
+  
+  // Run existing letter-based effects
   letterSequence(EffectConfig::SEQUENCE_LETTER_DURATION);
   delay(SCENE_TRANSITION);
-  
-  letterRainbow(EffectConfig::RAINBOW_CYCLES);
-  delay(SCENE_TRANSITION);
-  
+   
   letterChase(COLOR_RED, EffectConfig::CHASE_SPEED, EffectConfig::CHASE_CYCLES);
   delay(SCENE_TRANSITION);
   
@@ -32,18 +34,50 @@ void loop() {
   delay(SCENE_TRANSITION);
 }
 
-// Helper function to clear all LEDs
+// Helper Functions
 void clearStrip() {
   for(int i = 0; i < LED_COUNT; i++) {
     strip.setPixelColor(i, COLOR_OFF);
   }
 }
 
-// Helper function to set color for a specific letter
 void setLetterColor(int startLed, int length, uint32_t color) {
   for(int i = startLed; i < startLed + length; i++) {
     strip.setPixelColor(i, color);
   }
+}
+
+// Effect Functions
+// Effect 0: Slow fade from off to bright white, then hold
+void fadeInAndHold() {
+  const unsigned long FADE_DURATION = 5000;    // 5 seconds for the fade
+  const unsigned long HOLD_DURATION = 60000;   // 60 seconds hold time
+  unsigned long effectStart = millis();
+  
+  // First phase: Fade in
+  while (millis() - effectStart < FADE_DURATION) {
+    float progress = (float)(millis() - effectStart) / FADE_DURATION;
+    uint8_t brightness = progress * 255;  // Calculate current brightness level
+    
+    // Set all LEDs to white at current brightness
+    for(int i = 0; i < LED_COUNT; i++) {
+      // Warm white: More red, slightly less blue
+      strip.setPixelColor(i, strip.Color(brightness, brightness * 0.95, brightness * 0.8));
+    }
+    
+    strip.show();
+    delay(20);  // Small delay for smooth transition
+  }
+  
+  // Second phase: Hold at full brightness
+  for(int i = 0; i < LED_COUNT; i++) {
+    // Warm white: Full red, 95% green, 80% blue
+    strip.setPixelColor(i, strip.Color(255, 242, 204));
+  }
+  strip.show();
+  
+  // Hold for the remaining time
+  delay(HOLD_DURATION);
 }
 
 // Effect 1: Light up letters in sequence
@@ -78,38 +112,6 @@ void letterSequence(int wait) {
     setLetterColor(Y_START, Y_LENGTH, COLOR_RED);
     strip.show();
     delay(wait);
-  }
-}
-
-// Effect 2: Rainbow effect per letter
-void letterRainbow(int cycles) {
-  unsigned long effectStart = millis();
-  int c = 0;
-  
-  while (millis() - effectStart < SCENE_DURATION) {
-    uint32_t m_color = strip.ColorHSV((c * 65536 / cycles) % 65536);
-    uint32_t e_color = strip.ColorHSV(((c * 65536 / cycles) + 13107) % 65536);
-    uint32_t r1_color = strip.ColorHSV(((c * 65536 / cycles) + 26214) % 65536);
-    uint32_t r2_color = strip.ColorHSV(((c * 65536 / cycles) + 39321) % 65536);
-    uint32_t y_color = strip.ColorHSV(((c * 65536 / cycles) + 52428) % 65536);
-    
-    if (USE_GAMMA_CORRECTION) {
-      m_color = strip.gamma32(m_color);
-      e_color = strip.gamma32(e_color);
-      r1_color = strip.gamma32(r1_color);
-      r2_color = strip.gamma32(r2_color);
-      y_color = strip.gamma32(y_color);
-    }
-    
-    setLetterColor(M_START, M_LENGTH, m_color);
-    setLetterColor(E1_START, E1_LENGTH, e_color);
-    setLetterColor(R1_START, R1_LENGTH, r1_color);
-    setLetterColor(R2_START, R2_LENGTH, r2_color);
-    setLetterColor(Y_START, Y_LENGTH, y_color);
-    
-    strip.show();
-    delay(EffectConfig::RAINBOW_SPEED);
-    c++;
   }
 }
 
@@ -148,29 +150,53 @@ void letterChase(uint32_t color, int wait, int cycles) {
   }
 }
 
-// Effect 4: Twinkle effect per letter
+// Effect 4: Camera flash effect with random LEDs
 void letterTwinkle(int wait, int cycles) {
   unsigned long effectStart = millis();
   
+  // Track flash state for each LED
+  bool ledFlashing[LED_COUNT] = {false};  // Initialize all to false
+  unsigned long flashStartTime[LED_COUNT] = {0};
+  const int FLASH_DURATION = 50;  // Duration of each flash in milliseconds
+  const int NUM_SIMULTANEOUS_FLASHES = 5;  // How many LEDs can flash at once
+  
   while (millis() - effectStart < SCENE_DURATION) {
-    // Pick a random letter to twinkle
-    int letter = random(5);
-    int startLed, length;
+    unsigned long currentTime = millis();
     
-    switch(letter) {
-      case 0: startLed = M_START; length = M_LENGTH; break;
-      case 1: startLed = E1_START; length = E1_LENGTH; break;
-      case 2: startLed = R1_START; length = R1_LENGTH; break;
-      case 3: startLed = R2_START; length = R2_LENGTH; break;
-      case 4: startLed = Y_START; length = Y_LENGTH; break;
+    // Count current flashing LEDs
+    int flashingCount = 0;
+    for(int i = 0; i < LED_COUNT; i++) {
+      if(ledFlashing[i]) flashingCount++;
     }
     
-    // Twinkle the chosen letter
-    setLetterColor(startLed, length, COLOR_WHITE);
+    // Try to start new flashes if we're below the simultaneous flash limit
+    while(flashingCount < NUM_SIMULTANEOUS_FLASHES) {
+      int ledIndex = random(LED_COUNT);  // Pick a random LED
+      
+      // If this LED isn't already flashing, start it
+      if(!ledFlashing[ledIndex]) {
+        ledFlashing[ledIndex] = true;
+        flashStartTime[ledIndex] = currentTime;
+        flashingCount++;
+      }
+    }
+    
+    // Update all LEDs
+    for(int i = 0; i < LED_COUNT; i++) {
+      // Check if flash should end
+      if(ledFlashing[i] && (currentTime - flashStartTime[i] > FLASH_DURATION)) {
+        ledFlashing[i] = false;
+      }
+      
+      // Set LED color based on flash state
+      if(ledFlashing[i]) {
+        strip.setPixelColor(i, COLOR_WHITE);  // Bright flash
+      } else {
+        strip.setPixelColor(i, COLOR_OFF);    // Off between flashes
+      }
+    }
+    
     strip.show();
-    delay(wait);
-    setLetterColor(startLed, length, COLOR_OFF);
-    strip.show();
-    delay(wait/2);
+    delay(10);  // Quick update for sharp flashes
   }
 }

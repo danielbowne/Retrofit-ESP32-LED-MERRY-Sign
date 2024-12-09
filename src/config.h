@@ -4,7 +4,7 @@
 // Pin and LED configuration
 #define LED_PIN         5       // GPIO pin connected to the LED strip
 #define LED_COUNT      50      // Total number of LEDs
-#define BRIGHTNESS     50      // Default brightness (0-255)
+#define BRIGHTNESS     100      // Default brightness (0-255)
 
 // Letter definitions
 #define M_START        0       // M starts at LED 0
@@ -26,10 +26,6 @@
 struct EffectConfig {
     // Letter Sequence effect
     static const int SEQUENCE_LETTER_DURATION = 100;  // Time each letter stays lit
-
-    // Rainbow effect
-    static const int RAINBOW_CYCLES = 20;            // Number of color cycles
-    static const int RAINBOW_SPEED = 50;             // Delay between color changes
 
     // Chase effect
     static const int CHASE_SPEED = 50;              // Speed of the chase movement
